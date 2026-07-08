@@ -32,7 +32,9 @@ keep their original depth, because a node only survives when its whole ancestor 
 - The input satisfies the documented depth invariants (DFS order, first node at depth 0,
   depth increases by at most 1 between consecutive nodes).
 - Node IDs are unique, as stated by `Hierarchy.nodeId(int)`.
-- `hierarchy` and `nodeIdPredicate` are non-null.
+- `hierarchy` and `nodeIdPredicate` must be non-null; this is enforced and throws `NullPointerException`.
+- `ArrayBasedHierarchy` is immutable: the constructor makes defensive copies of the input arrays
+  and requires them to have equal length.
 
 ## Task 2 — SimpleCache Code Review
 

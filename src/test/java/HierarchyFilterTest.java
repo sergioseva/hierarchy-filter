@@ -1,6 +1,10 @@
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.function.IntPredicate;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HierarchyFilterTest {
 
@@ -115,6 +119,65 @@ class HierarchyFilterTest {
         Hierarchy unfiltered = new ArrayBasedHierarchy(new int[]{1}, new int[]{0});
         Hierarchy filteredActual = HierarchyFilter.filter(unfiltered, nodeId -> false);
         assertEquals("[]", filteredActual.formatString());
+    }
+
+    /**
+     * A very deep chain (100k levels) must be handled without a StackOverflowError.
+     * This guards against a recursive implementation: the algorithm is iterative, so an
+     * arbitrarily deep hierarchy is processed in constant stack space.
+     */
+    @Test
+    void testDeepHierarchyDoesNotOverflowStack() {
+        int n = 100_000;
+        int[] nodeIds = new int[n];
+        int[] depths = new int[n];
+        for (int i = 0; i < n; i++) {
+            nodeIds[i] = i;
+            depths[i] = i; // each node is the single child of the previous one
+        }
+        Hierarchy unfiltered = new ArrayBasedHierarchy(nodeIds, depths);
+
+        // Keeps every node: exercises the full-depth traversal without pruning.
+        Hierarchy filtered = HierarchyFilter.filter(unfiltered, nodeId -> true);
+
+        assertEquals(n, filtered.size());
+        assertEquals(0, filtered.nodeId(0));
+        assertEquals(n - 1, filtered.nodeId(n - 1));
+        assertEquals(n - 1, filtered.depth(n - 1));
+    }
+
+    /**
+     * The predicate must be evaluated at most once per node, and not at all for nodes that are
+     * pruned because an ancestor failed. This documents the efficiency contract of the algorithm.
+     *
+     * <p>For the sample forest with predicate {@code nodeId % 3 != 0}, nodes 3, 6 and 9 fail.
+     * Nodes 4 and 7 are descendants of failed nodes (3 and 6) and must never be tested, so the
+     * predicate is invoked on 9 of the 11 nodes.
+     */
+    @Test
+    void testPredicateEvaluatedAtMostOncePerNodeAndNeverForPrunedNodes() {
+        Hierarchy unfiltered = new ArrayBasedHierarchy(
+                new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+                new int[]{0, 1, 2, 3, 1, 0, 1, 0, 1, 1, 2}
+        );
+
+        int[] callsPerNodeId = new int[12]; // index == nodeId (ids are 1..11)
+        IntPredicate counting = nodeId -> {
+            callsPerNodeId[nodeId]++;
+            return nodeId % 3 != 0;
+        };
+
+        HierarchyFilter.filter(unfiltered, counting);
+
+        // No node is evaluated more than once.
+        for (int id = 1; id <= 11; id++) {
+            assertTrue(callsPerNodeId[id] <= 1, "node " + id + " was evaluated more than once");
+        }
+        // Descendants of failed ancestors are never evaluated.
+        assertEquals(0, callsPerNodeId[4], "node 4 (child of failed 3) must not be evaluated");
+        assertEquals(0, callsPerNodeId[7], "node 7 (child of failed 6) must not be evaluated");
+        // 11 nodes minus the 2 pruned descendants = 9 predicate calls in total.
+        assertEquals(9, Arrays.stream(callsPerNodeId).sum());
     }
 
     /** Deep chain where an intermediate node fails removes everything below it. */

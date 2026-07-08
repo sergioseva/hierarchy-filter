@@ -1,4 +1,5 @@
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.function.IntPredicate;
 
 /**
@@ -81,7 +82,7 @@ interface Hierarchy {
  *   <li>Node IDs are unique, as stated by {@link Hierarchy#nodeId(int)}.</li>
  *   <li>Surviving nodes keep their original depth: a node only survives if all of its ancestors
  *       survive, so its ancestor chain is intact and its depth is unchanged.</li>
- *   <li>{@code hierarchy} and {@code nodeIdPredicate} are non-null.</li>
+ *   <li>{@code hierarchy} and {@code nodeIdPredicate} must be non-null (enforced, throws {@link NullPointerException}).</li>
  * </ul>
  */
 class HierarchyFilter {
@@ -98,6 +99,9 @@ class HierarchyFilter {
      * <p>Runs in O(n) time and O(1) additional state beyond the output arrays.
      */
     public static Hierarchy filter(Hierarchy hierarchy, IntPredicate nodeIdPredicate) {
+        Objects.requireNonNull(hierarchy, "hierarchy must not be null");
+        Objects.requireNonNull(nodeIdPredicate, "nodeIdPredicate must not be null");
+
         // Upper bound on the result size is the input size (we can only remove nodes, never add).
         int[] nodeIds = new int[hierarchy.size()];
         int[] depths = new int[hierarchy.size()];
@@ -140,8 +144,15 @@ class ArrayBasedHierarchy implements Hierarchy {
     private final int[] depths;
 
     public ArrayBasedHierarchy(int[] nodeIds, int[] depths) {
-        this.nodeIds = nodeIds;
-        this.depths = depths;
+        Objects.requireNonNull(nodeIds, "nodeIds must not be null");
+        Objects.requireNonNull(depths, "depths must not be null");
+        if (nodeIds.length != depths.length) {
+            throw new IllegalArgumentException(
+                    "nodeIds and depths must have the same length: " + nodeIds.length + " != " + depths.length);
+        }
+        // Defensive copies so the hierarchy is immutable and cannot be changed by the caller after construction.
+        this.nodeIds = Arrays.copyOf(nodeIds, nodeIds.length);
+        this.depths = Arrays.copyOf(depths, depths.length);
     }
 
     @Override
